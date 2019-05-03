@@ -1,10 +1,13 @@
-.PHONY: build integration-test docker-up docker-down clear 
+.PHONY: dependency unit-test integration-test docker-up docker-down clear 
 
-build:
-	@go build
+dependency:
+	@go get -v ./...
 
 integration-test: docker-up dependency
 	@go test -v ./...
+
+unit-test: dependency
+	@go test -v -short ./...
 
 docker-up:
 	@docker-compose up -d
