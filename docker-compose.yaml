@@ -1,0 +1,27 @@
+version: '3.5'
+services:
+  search_api:
+    container_name: 'es_api'
+    build: .
+    restart: 'on-failure'
+    ports:
+      - '8080:8080'
+    depends_on:
+      - elastic
+    networks:
+      - esapi_net  
+  elastic:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.0.1
+    container_name: elastic
+    hostname: elastic
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - 9200:9200  
+    networks:
+      - esapi_net   
+
+networks:
+  esapi_net:
+    name: esapi_net   
