@@ -5,22 +5,61 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
+	"time"
 
-	"github.com/joho/godotenv"
 	. "github.com/smartystreets/goconvey/convey"
+)
+
+const (
+	testToken = "SEARCH_API_TEST_TOKEN"
+)
+
+var (
+	// TestPut +++++++++++++++++++++++++++++++++++++++
+	testPostDoc = []Doc{
+		Doc{
+			Name:     "test_doc",
+			Brand:    "test_brand",
+			KeyWords: []string{"key", "word"},
+		},
+	}
+
+	checkPostQueryParams = getQueryParams{
+		q:      testPostDoc[0].Name,
+		limit:  10,
+		offset: 0,
+		sortBy: "name",
+		order:  "desc",
+	}
+	// TestPut +++++++++++++++++++++++++++++++++++++++
+
+	// TestGet +++++++++++++++++++++++++++++++++++++++
+	testGetDocs = []Doc{
+		Doc{
+			Name:     "aa",
+			Brand:    "abc",
+			KeyWords: []string{"summer", "cool"},
+		},
+		Doc{
+			Name:     "bb",
+			Brand:    "def",
+			KeyWords: []string{"winter"},
+		},
+
+		Doc{
+			Name:     "ght",
+			Brand:    "yui",
+			KeyWords: []string{"usa", "uk"},
+		},
+	}
+	// TestGet +++++++++++++++++++++++++++++++++++++++
 )
 
 func TestGetTokenV1(t *testing.T) {
 	Convey("Test get token", t, func() {
-		handlers, err := newAPIHandler(testElasticAddr, tokenSignKey, tokenVerifyKey, tokenExpireAt)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := handlers.elastic.deleteIndex(elasticIndexName); err != nil {
-			t.Fatal(err)
-		}
+		handlers := newTestHandlers(t)
 
 		req, err := http.NewRequest("GET", "/v1/auth?creds=someid:somesecret", nil)
 		if err != nil {
@@ -36,6 +75,7 @@ func TestGetTokenV1(t *testing.T) {
 		}
 
 		var token Token
+
 		if err := json.Unmarshal(rr.Body.Bytes(), &token); err != nil {
 			t.Fatal(err)
 		}
@@ -48,30 +88,22 @@ func TestGetTokenV1(t *testing.T) {
 
 func TestPostProductV1(t *testing.T) {
 	Convey("Test post product", t, func() {
-		handlers, err := newAPIHandler(testElasticAddr, tokenSignKey, tokenVerifyKey, tokenExpireAt)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := handlers.elastic.deleteIndex(elasticIndexName); err != nil {
-			t.Fatal(err)
-		}
-
-		testDoc := Doc{
-			Name:     "test_doc",
-			Brand:    "test_brand",
-			KeyWords: []string{"key", "word"},
-		}
+		handlers := newTestHandlers(t)
 
 		buf := new(bytes.Buffer)
-		json.NewEncoder(buf).Encode(testDoc)
-		req, err := http.NewRequest("POST", "/v1/product", buf)
-		if err != nil {
+
+		if err := json.NewEncoder(buf).Encode(testPostDoc); err != nil {
 			t.Fatal(err)
 		}
 
+		req, err := http.NewRequest("POST", "/v1/products", buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Add("Authorization", os.Getenv(testToken))
+
 		rr := httptest.NewRecorder()
-		handlers, err = newAPIHandler(testElasticAddr, tokenSignKey, tokenVerifyKey, tokenExpireAt)
+		handlers, err = newAPIHandler(os.Getenv(elasticAddr), os.Getenv(tokenSignKey), os.Getenv(tokenVerifyKey), os.Getenv(tokenExpireAt))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -82,58 +114,30 @@ func TestPostProductV1(t *testing.T) {
 				status, http.StatusOK)
 		}
 
-		shoes, err := handlers.elastic.get(queryParams{
-			q:      testDoc.Name,
-			limit:  1,
-			offset: 0,
-		})
+		<-time.After(time.Second)
+		shoes, err := handlers.elastic.get(&checkPostQueryParams)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		So(shoes[0].Name, ShouldEqual, testDoc.Name)
+		So(shoes.Hits[0].Name, ShouldEqual, testPostDoc[0].Name)
 	})
 }
 
 func TestGetProductsV1(t *testing.T) {
 	Convey("Test get products", t, func() {
-		handlers, err := newAPIHandler(testElasticAddr, tokenSignKey, tokenVerifyKey, tokenExpireAt)
+		handlers := newTestHandlers(t)
+
+		if err := handlers.elastic.put(testGetDocs, waitingUntilIndexed); err != nil {
+			t.Fatal(err)
+		}
+		<-time.After(time.Second)
+		returnedDocs := searchResults{}
+		req, err := http.NewRequest("GET", "/v1/products", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		if err := handlers.elastic.deleteIndex(elasticIndexName); err != nil {
-			t.Fatal(err)
-		}
-
-		testDocs := []Doc{
-			Doc{
-				Name:     "aa",
-				Brand:    "abc",
-				KeyWords: []string{"summer", "cool"},
-			},
-			Doc{
-				Name:     "bb",
-				Brand:    "def",
-				KeyWords: []string{"winter"},
-			},
-
-			Doc{
-				Name:     "ght",
-				Brand:    "yui",
-				KeyWords: []string{"usa", "uk"},
-			},
-		}
-
-		if err := handlers.elastic.put(testDocs); err != nil {
-			t.Fatal(err)
-		}
-
-		returnedDocs := []Doc{}
-		req, err := http.NewRequest("GET", "/v1/products?asc=false", nil)
-		if err != nil {
-			t.Fatal(err)
-		}
+		req.Header.Add("Authorization", os.Getenv(testToken))
 
 		rr := httptest.NewRecorder()
 		handlers.router.ServeHTTP(rr, req)
@@ -147,10 +151,20 @@ func TestGetProductsV1(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		So(len(returnedDocs), ShouldEqual, 3)
+		So(returnedDocs.Total, ShouldEqual, 3)
+		So(len(returnedDocs.Hits), ShouldEqual, 3)
 	})
 }
 
-func TestMain(m *testing.M) {
-	godotenv.Load(envFile)
+func newTestHandlers(t *testing.T) apiHandler {
+	handlers, err := newAPIHandler(os.Getenv(elasticAddr), os.Getenv(tokenSignKey), os.Getenv(tokenVerifyKey), os.Getenv(tokenExpireAt))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := handlers.elastic.deleteIndex(shoesIndex); err != nil {
+		t.Fatal(err)
+	}
+
+	return handlers
 }

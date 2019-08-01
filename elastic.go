@@ -1,189 +1,257 @@
 package main
 
 import (
-	"context"
+	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/olivere/elastic/v7"
+	"github.com/elastic/go-elasticsearch/v8"
+	"github.com/elastic/go-elasticsearch/v8/esapi"
 	wrapper "github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
 
 const (
-	elasticIndexName = "documents"
+	shoesIndex = "shoes_mapping"
+
+	shoesMapping = `
+	{
+		"settings":{
+			"number_of_shards":5,
+			"number_of_replicas":0,
+			"analysis":{
+				"filter":{
+				   "stemmer":{
+					  "type":"stemmer",
+					  "language":"english"
+				   },
+				   "stopwords":{
+					  "type":"stop",
+					  "stopwords":[
+						 "_english_"
+					  ]
+				   }
+				},
+				"analyzer":{
+				   "shoe_analyzer":{
+					  "filter":[
+						 "stopwords",
+						 "lowercase",
+						 "stemmer"
+					  ],
+					  "type":"custom",
+					  "tokenizer":"standard"
+				   }
+				}
+			 }
+		},
+		"mappings":{
+			    "dynamic" : false,
+				"properties":{
+					"id": {
+						"type":"text"
+					},
+					"created_at":{
+						"type":"date"
+					},
+					"name":{
+						"type":"text",
+						"fielddata": true,
+						"analyzer":"shoe_analyzer",
+						"search_analyzer":"shoe_analyzer"
+					},
+					"brand":{
+						"type":"text",
+						"fielddata": true,
+						"analyzer":"shoe_analyzer",
+						"search_analyzer":"shoe_analyzer"
+					},
+					"key_words":{
+						"type":"keyword"
+					}
+			}
+		}
+	}`
 )
 
-type elasticEngine struct {
-	client *elastic.Client
+type searchEngine interface {
+	createIndex(index, mapping string) error
+	deleteIndex(index string) error
+
+	put(shoes []Doc, waitingUntilIndexed bool) error
+	get(params *getQueryParams) (searchResults, error)
 }
 
-func newElasticEngine(elasticAddr string) (elasticEngine, error) {
-	var (
-		elasticClient *elastic.Client
-		err           error
-	)
+type elasticEngine struct {
+	client *elasticsearch.Client
+}
 
-	for i := 0; i < 10; i++ {
-		elasticClient, err = elastic.NewClient(
-			elastic.SetURL(elasticAddr),
-			elastic.SetSniff(false),
-		)
-		if err != nil {
-			log.Error(err)
-			time.Sleep(time.Second)
-		} else {
-			break
-		}
-	}
-
-	if elasticClient == nil {
-		return elasticEngine{}, wrapper.Wrap(err, "can't connect to elastic")
+func newElasticEngine(elasticAddr string) (searchEngine, error) {
+	esClient, err := elasticsearch.NewDefaultClient()
+	if err != nil {
+		return nil, wrapper.Wrap(err, "error creating the client")
 	}
 
 	client := elasticEngine{
-		client: elasticClient,
+		client: esClient,
 	}
 
-	if err := client.createIndex(); err != nil {
-		return elasticEngine{}, wrapper.Wrap(err, "error while create index")
+	if err := client.createIndex(shoesIndex, shoesMapping); err != nil {
+		return nil, wrapper.Wrap(err, "error while create index")
 	}
 
-	return client, nil
+	return &client, nil
 }
 
-func (ee *elasticEngine) put(shoes []Doc) error {
-	bulk := ee.client.
-		Bulk().
-		Index(elasticIndexName)
+func (ee *elasticEngine) put(shoes []Doc, waitingUntilIndexed bool) error {
+	var buf bytes.Buffer
+	var blk *bulkResponse
 
-	for _, shoe := range shoes {
-		shoe.ID = uuid.New().String()
-		shoe.CreatedAt = time.Now().UTC()
-		bulk.Add(elastic.NewBulkIndexRequest().Id(shoe.ID).Doc(shoe))
+	raw := map[string]interface{}{}
+
+	for _, a := range shoes {
+		a.CreatedAt = time.Now()
+		meta := []byte(fmt.Sprintf(`{ "index" : { "_index" : "%s" }}%s`, shoesIndex, "\n"))
+		data, err := json.Marshal(a)
+		if err != nil {
+			return wrapper.Wrap(err, "error while encode doc")
+		}
+
+		data = append(data, "\n"...)
+
+		buf.Grow(len(meta) + len(data))
+		buf.Write(meta)
+		buf.Write(data)
 	}
 
-	if _, err := bulk.Do(context.Background()); err != nil {
-		return wrapper.Wrap(err, "error while insert value to elastic")
+	args := []func(*esapi.BulkRequest){ee.client.Bulk.WithIndex(shoesIndex)}
+	if waitingUntilIndexed {
+		args = append(args, ee.client.Bulk.WithRefresh("wait_for"))
 	}
 
+	res, err := ee.client.Bulk(bytes.NewReader(buf.Bytes()), args...)
+	if err != nil {
+		return wrapper.Wrap(err, "error while indexind butch")
+	}
+
+	if res.IsError() {
+		if err := json.NewDecoder(res.Body).Decode(&raw); err != nil {
+			return wrapper.Wrap(err, "failure to to parse response body")
+		}
+
+		return errors.New(fmt.Sprintf("error: [%d] %s: %s",
+			res.StatusCode,
+			raw["error"].(map[string]interface{})["type"],
+			raw["error"].(map[string]interface{})["reason"]))
+
+	}
+
+	if err := json.NewDecoder(res.Body).Decode(&blk); err != nil {
+		return wrapper.Wrap(err, "failure to to parse response body")
+	}
+
+	for _, d := range blk.Items {
+		if d.Index.Status > 201 {
+			log.Errorf("error: [%d]: %s: %s: %s: %s",
+				d.Index.Status,
+				d.Index.Error.Type,
+				d.Index.Error.Reason,
+				d.Index.Error.Cause.Type,
+				d.Index.Error.Cause.Reason,
+			)
+		}
+	}
+
+	log.Infof("bulk write complete for %d items", len(shoes))
 	return nil
 }
 
-func (ee *elasticEngine) get(params queryParams) ([]Doc, error) {
-	var esQuery elastic.Query
+func (ee *elasticEngine) get(params *getQueryParams) (searchResults, error) {
+	var results searchResults
 
-	log.Infof("start query with params: %+v", params)
-
-	switch params.q {
-	case "":
-		esQuery = elastic.NewMatchAllQuery()
-	default:
-		esQuery = elastic.NewMultiMatchQuery(params.q, "name", "brand", "key_words").
-			Fuzziness("2").
-			MinimumShouldMatch("2")
-	}
-
-	esQuery = addFilter(esQuery, params.filterField, params.filterValue)
-
-	result, err := ee.client.Search().
-		Index(elasticIndexName).
-		Query(esQuery).
-		SortBy(elastic.NewFieldSort(params.sortBy).Order(params.asc).SortMode("min")).
-		From(params.offset).Size(params.limit).
-		Do(context.Background())
+	res, err := ee.client.Search(
+		ee.client.Search.WithIndex(shoesIndex),
+		ee.client.Search.WithBody(params.build()),
+	)
 	if err != nil {
-		return nil, wrapper.Wrap(err, "error while do shoes query")
+		return searchResults{}, err
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		var e map[string]interface{}
+		if err := json.NewDecoder(res.Body).Decode(&e); err != nil {
+			return searchResults{}, wrapper.Wrapf(err, "can't unmarshal returned error: %v, %s", err, res.String())
+		}
+		return searchResults{}, fmt.Errorf("[%s] %s: %s", res.Status(), e["error"].(map[string]interface{})["type"], e["error"].(map[string]interface{})["reason"])
 	}
 
-	res := []Doc{}
-	for _, hit := range result.Hits.Hits {
-		doc := Doc{}
-		if err := json.Unmarshal(hit.Source, &doc); err != nil {
-			return nil, wrapper.Wrap(err, "error while unmarshal elastic doc")
+	var r envelopeResponse
+	if err := json.NewDecoder(res.Body).Decode(&r); err != nil {
+		return searchResults{}, err
+	}
+
+	results.Total = r.Hits.Total.Value
+
+	if len(r.Hits.Hits) == 0 {
+		results.Hits = []*Hit{}
+		return searchResults{}, nil
+	}
+
+	for _, hit := range r.Hits.Hits {
+		var h Hit
+		h.ID = hit.ID
+
+		if err := json.Unmarshal(hit.Source, &h); err != nil {
+			return searchResults{}, err
 		}
 
-		res = append(res, doc)
+		results.Hits = append(results.Hits, &h)
 	}
 
-	return res, nil
+	return results, nil
 }
 
-func (ee *elasticEngine) createIndex() error {
-	// Use the IndexExists service to check if a specified index exists.
-	exists, err := ee.client.IndexExists(elasticIndexName).Do(context.Background())
+func (ee *elasticEngine) createIndex(index, mapping string) error {
+	res, err := ee.client.Indices.Create(index, ee.client.Indices.Create.WithBody(strings.NewReader(mapping)))
 	if err != nil {
-		return wrapper.Wrap(err, "error while check index exists")
+		return wrapper.Wrap(err, "error while create index")
 	}
-	if !exists {
-		// Create a new index.
-		mapping := `
-{
-	"settings":{
-		"number_of_shards":1,
-		"number_of_replicas":0
-	},
-	"mappings":{
-			"properties":{
-				"id": {
-					"type":"text"
-				},
-				"created_at":{
-					"type":"date"
-				},
-				"name":{
-					"type":"text",
-					"store": true,
-					"fielddata": true
-				},
-				"brand":{
-					"type":"text",
-					"store": true,
-					"fielddata": true
-				},
-				"key_words":{
-					"type":"keyword"
-				}
-		}
-	}
-}
-`
 
-		_, err := ee.client.CreateIndex(elasticIndexName).Body(mapping).Do(context.Background())
-		if err != nil {
-			return wrapper.Wrap(err, "error while create index")
+	if res.IsError() {
+		createIndexResponse := createIndexResponse{}
+
+		if err := json.NewDecoder(res.Body).Decode(&createIndexResponse); err != nil {
+			log.Error(err, string(res.String()))
+			return errors.New(res.String())
 		}
+
+		if len(createIndexResponse.Error.RootCause) < 0 {
+			return errors.New(res.String())
+		}
+
+		if createIndexResponse.Error.RootCause[0].Type == "resource_already_exists_exception" {
+			return nil
+		}
+
+		return errors.New(res.String())
 	}
 
 	return nil
 }
 
 func (ee *elasticEngine) deleteIndex(index string) error {
-	resp, err := ee.client.DeleteIndex(index).
-		Do(context.Background())
+	res, err := ee.client.Indices.Delete([]string{index})
 	if err != nil {
-		return wrapper.Wrap(err, "error while delete index")
+		return wrapper.Wrap(err, "error while create index")
 	}
 
-	if !resp.Acknowledged {
-		return errors.New("index not deleted: Acknowledged is false")
+	if res.IsError() {
+		return errors.New(res.String())
 	}
+
 	return nil
-}
-
-func addFilter(q elastic.Query, filter, with string) elastic.Query {
-	switch filter {
-	case "brand", "name", "key_words":
-		return buildFilters(q, filter, with)
-	default:
-		return q
-	}
-}
-
-func buildFilters(q elastic.Query, filter, with string) elastic.Query {
-	return elastic.NewBoolQuery().
-		Must(q).
-		Filter(elastic.NewMatchQuery(filter, with))
 }

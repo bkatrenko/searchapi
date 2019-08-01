@@ -3,19 +3,26 @@ package main
 import (
 	"crypto/rsa"
 	"errors"
-	"fmt"
 
 	jwt "github.com/dgrijalva/jwt-go"
 	wrapper "github.com/pkg/errors"
 )
 
 const (
+	// RS256 is the algorithm for encoding/decoding JWT tokens.
+	// You can read more there -> https://auth0.com/blog/navigating-rs256-and-jwks/
 	signedMethod = "RS256"
-	tokenType    = "search_access"
+	// tokenType represents functionality of it's token - 'access' means that token can be used
+	// for grant access to some resource, refresh can be used for refreshing access token.
+	// Ususally no problems to have your own custom token types is you need to override this functionality
+	tokenType = "access"
 )
 
-// TokenInfo using to store info inside token
+// TokenInfo using to store info inside token. Developers usually put there info which can be used
+// for authorization/authentication
+// https://jwt.io/introduction
 type tokenInfo struct {
+	// Source contains info about from where token was taken
 	Source string
 }
 
@@ -29,7 +36,7 @@ type tokenClaims struct {
 // MakeToken create new encrypted token with claims
 func makeToken(signKey *rsa.PrivateKey, source string, expireAt int64) (string, error) {
 	t := jwt.New(jwt.GetSigningMethod(signedMethod))
-	fmt.Println(expireAt)
+
 	// set our claims
 	t.Claims = &tokenClaims{
 		&jwt.StandardClaims{
@@ -51,6 +58,10 @@ func makeToken(signKey *rsa.PrivateKey, source string, expireAt int64) (string, 
 func verifyToken(token string, verifyKey *rsa.PublicKey) (tokenClaims, error) {
 	if len(token) == 0 {
 		return tokenClaims{}, errors.New("token is empty")
+	}
+
+	if verifyKey == nil {
+		return tokenClaims{}, errors.New("verify key is nil")
 	}
 
 	// validate the token
@@ -81,21 +92,13 @@ func verifyToken(token string, verifyKey *rsa.PublicKey) (tokenClaims, error) {
 
 		switch vErr.Errors {
 		case jwt.ValidationErrorExpired:
-			return tokenClaims{}, fmt.Errorf("token expired: %v", vErr)
+			return tokenClaims{}, wrapper.Wrap(err, "token expired")
 
 		default:
-			return tokenClaims{}, fmt.Errorf("token invalid: %v", vErr)
+			return tokenClaims{}, wrapper.Wrap(err, "token invalid")
 		}
 
 	default: // something else went wrong
-		return tokenClaims{}, err
+		return tokenClaims{}, wrapper.Wrap(err, "unexpected token error")
 	}
-}
-
-func parsePrivateKey(key []byte) (*rsa.PrivateKey, error) {
-	return jwt.ParseRSAPrivateKeyFromPEM(key)
-}
-
-func parsePublicKey(key []byte) (*rsa.PublicKey, error) {
-	return jwt.ParseRSAPublicKeyFromPEM(key)
 }

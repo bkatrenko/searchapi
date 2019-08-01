@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/mux"
 	wrapper "github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -20,14 +21,13 @@ type apiHandler struct {
 	verifyKey *rsa.PublicKey
 	router    *mux.Router
 
-	clientCreds   string
 	tokenExpireAt int64
-
-	elastic elasticEngine
+	elastic       searchEngine
 }
 
 func newAPIHandler(elasticAddr, privateKey, publicKey string, tokenExpireAt string) (apiHandler, error) {
 	log.Info("connect to elastic on addr: ", elasticAddr)
+
 	elastic, err := newElasticEngine(elasticAddr)
 	if err != nil {
 		return apiHandler{}, wrapper.Wrap(err, "can't create elastic engine")
@@ -85,14 +85,14 @@ func (h *apiHandler) getTokenV1(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *apiHandler) getProductsV1(w http.ResponseWriter, r *http.Request) {
-	params := queryParams{}
+	params := &getQueryParams{}
 	if err := params.fill(r); err != nil {
 		log.Error(err)
 		h.writeError(w, http.StatusBadRequest, "bad query")
 		return
 	}
 
-	if err := params.validate(); err != nil {
+	if err := params.validateAndFill(); err != nil {
 		log.Error(err)
 		h.writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -113,14 +113,22 @@ func (h *apiHandler) getProductsV1(w http.ResponseWriter, r *http.Request) {
 func (h *apiHandler) postProductV1(w http.ResponseWriter, r *http.Request) {
 	docs := []Doc{}
 
-	if err := json.NewDecoder(r.Body).Decode(&docs); err != nil {
+	params := &putQueryParams{}
+
+	if err := params.fill(r); err != nil {
 		log.Error(err)
+		h.writeError(w, http.StatusBadRequest, "bad waiting query param")
+		return
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&docs); err != nil {
+		log.Errorf("error while decode post request: %v", err)
 		h.writeError(w, http.StatusBadRequest, "bad input JSON")
 		return
 	}
 
-	if err := h.elastic.put(docs); err != nil {
-		log.Error(err)
+	if err := h.elastic.put(docs, params.waitingForIndexed); err != nil {
+		log.Errorf("error while put docs to the es: %v", err)
 		h.writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
@@ -129,11 +137,14 @@ func (h *apiHandler) postProductV1(w http.ResponseWriter, r *http.Request) {
 func (h *apiHandler) writeError(w http.ResponseWriter, code int, err string) {
 	w.Header().Add("Content-type", "application/json")
 	w.WriteHeader(code)
-	w.Write([]byte(fmt.Sprintf("{\"error\": \"%s\"}", err)))
+	if _, err := w.Write([]byte(fmt.Sprintf("{\"error\": \"%s\"}", err))); err != nil {
+		log.Errorf("error while write error response: %v", err)
+	}
 }
 
 func (h *apiHandler) writeJSON(w http.ResponseWriter, conte int, object interface{}) error {
 	w.Header().Add("Content-type", "application/json")
+
 	if err := json.NewEncoder(w).Encode(object); err != nil {
 		return wrapper.Wrap(err, "error while write json")
 	}
@@ -152,12 +163,12 @@ func (h *apiHandler) readKeys(private, public string) error {
 		return wrapper.Wrap(err, "error while read public key")
 	}
 
-	privateKey, err := parsePrivateKey(privateBytes)
+	privateKey, err := jwt.ParseRSAPrivateKeyFromPEM(privateBytes)
 	if err != nil {
 		return wrapper.Wrap(err, "error while parse private key")
 	}
 
-	publicKey, err := parsePublicKey(publicBytes)
+	publicKey, err := jwt.ParseRSAPublicKeyFromPEM(publicBytes)
 	if err != nil {
 		return wrapper.Wrap(err, "error while parse public key")
 	}

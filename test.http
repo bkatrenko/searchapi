@@ -5,19 +5,131 @@ GET http://localhost:8080/v1/auth?creds=someid:somesecret
 ### 
 
 GET http://localhost:8080/v1/products?q=sh
-Authorization: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE1NTY4Mjc3NzcsIlRva2VuVHlwZSI6InNlYXJjaF9hY2Nlc3MiLCJJbmZvIjp7IlNvdXJjZSI6InNlYXJjaGFwaSJ9fQ.zpMIPZ-l02LOfOw4ypMI9igcYJd0jjxlv2wVBUHb1rJxGIHfXtfeVouv8tVJtrTZmxeJLENkK9CYOQhUKkskQvmiIGcnLkeFpKJipX1agk-RgyoRPcDYVHD_Qfq8xhCRQ_wRGeKEMj71-HRAdKfyk7rjQ2wBRU8Nef6jo5ygKgtHf0vdkYd9FE42Nfnoklh2zSRIRRnN2CvEHHd-_9q2k5wr2_quISeogDZzftf8H49Ty0xkE6HDM_iiDWd6d6xPrcWK3DyGhVl-_gnOIU6J06cHQRlEVfan-X9PVOE7Oc28YYtgJq6h1WzYBDDNpLFlhjc9fJMKB5DpP1-_S8SNBw
+Authorization: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE1NjQwNjkwMTksIlRva2VuVHlwZSI6ImFjY2VzcyIsIkluZm8iOnsiU291cmNlIjoic2VhcmNoYXBpIn19.KZIGlmeM1n2jiVwNTpNMaENmFkotb6EgTH8PuqG3B3Q0UZ8AJ1KcjoR-_3-8tZvawxV3Eu8f5HLLUxM72NpODlj1vfV_HC1teLrl9Tol-H7WD2J4N0k4R3Cqosq1-k8LZ7EujITFpMZ0KPEV6qZqRK0SKGSuqE9VjdriCWbUmAK8tUaPWfMJUZl9bgODqWKErakog-QBsNe1mkcUpMkq6BmOa0FWB3-_JXYL5sOVML41pSydvDekxnnYrnUNWTJif8wLE0gn8U2l1MVyPJvWBxhf6N_zv0APXsDk9ZMSMUgtwuFA_QYIOyNMohE8kLbNlcjln_LpQRfPISlWYbsudA
 ###
 
-GET http://localhost:8080/v1/products?q=summer&sort_by=brand&asc=false&limit=100&filter=brand:bkatrenko
-Authorization: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE1NTY4Mjc3NzcsIlRva2VuVHlwZSI6InNlYXJjaF9hY2Nlc3MiLCJJbmZvIjp7IlNvdXJjZSI6InNlYXJjaGFwaSJ9fQ.zpMIPZ-l02LOfOw4ypMI9igcYJd0jjxlv2wVBUHb1rJxGIHfXtfeVouv8tVJtrTZmxeJLENkK9CYOQhUKkskQvmiIGcnLkeFpKJipX1agk-RgyoRPcDYVHD_Qfq8xhCRQ_wRGeKEMj71-HRAdKfyk7rjQ2wBRU8Nef6jo5ygKgtHf0vdkYd9FE42Nfnoklh2zSRIRRnN2CvEHHd-_9q2k5wr2_quISeogDZzftf8H49Ty0xkE6HDM_iiDWd6d6xPrcWK3DyGhVl-_gnOIU6J06cHQRlEVfan-X9PVOE7Oc28YYtgJq6h1WzYBDDNpLFlhjc9fJMKB5DpP1-_S8SNBw
+GET http://localhost:8080/v1/products?q=Bubblebox
+Authorization: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE1NjQwNjkwMTksIlRva2VuVHlwZSI6ImFjY2VzcyIsIkluZm8iOnsiU291cmNlIjoic2VhcmNoYXBpIn19.KZIGlmeM1n2jiVwNTpNMaENmFkotb6EgTH8PuqG3B3Q0UZ8AJ1KcjoR-_3-8tZvawxV3Eu8f5HLLUxM72NpODlj1vfV_HC1teLrl9Tol-H7WD2J4N0k4R3Cqosq1-k8LZ7EujITFpMZ0KPEV6qZqRK0SKGSuqE9VjdriCWbUmAK8tUaPWfMJUZl9bgODqWKErakog-QBsNe1mkcUpMkq6BmOa0FWB3-_JXYL5sOVML41pSydvDekxnnYrnUNWTJif8wLE0gn8U2l1MVyPJvWBxhf6N_zv0APXsDk9ZMSMUgtwuFA_QYIOyNMohE8kLbNlcjln_LpQRfPISlWYbsudA
 
 ###
 
 POST http://localhost:8080/v1/products
-Authorization: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE1NTY4Mjc3NzcsIlRva2VuVHlwZSI6InNlYXJjaF9hY2Nlc3MiLCJJbmZvIjp7IlNvdXJjZSI6InNlYXJjaGFwaSJ9fQ.zpMIPZ-l02LOfOw4ypMI9igcYJd0jjxlv2wVBUHb1rJxGIHfXtfeVouv8tVJtrTZmxeJLENkK9CYOQhUKkskQvmiIGcnLkeFpKJipX1agk-RgyoRPcDYVHD_Qfq8xhCRQ_wRGeKEMj71-HRAdKfyk7rjQ2wBRU8Nef6jo5ygKgtHf0vdkYd9FE42Nfnoklh2zSRIRRnN2CvEHHd-_9q2k5wr2_quISeogDZzftf8H49Ty0xkE6HDM_iiDWd6d6xPrcWK3DyGhVl-_gnOIU6J06cHQRlEVfan-X9PVOE7Oc28YYtgJq6h1WzYBDDNpLFlhjc9fJMKB5DpP1-_S8SNBw
+Authorization: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE1NjQwNjkwMTksIlRva2VuVHlwZSI6ImFjY2VzcyIsIkluZm8iOnsiU291cmNlIjoic2VhcmNoYXBpIn19.KZIGlmeM1n2jiVwNTpNMaENmFkotb6EgTH8PuqG3B3Q0UZ8AJ1KcjoR-_3-8tZvawxV3Eu8f5HLLUxM72NpODlj1vfV_HC1teLrl9Tol-H7WD2J4N0k4R3Cqosq1-k8LZ7EujITFpMZ0KPEV6qZqRK0SKGSuqE9VjdriCWbUmAK8tUaPWfMJUZl9bgODqWKErakog-QBsNe1mkcUpMkq6BmOa0FWB3-_JXYL5sOVML41pSydvDekxnnYrnUNWTJif8wLE0gn8U2l1MVyPJvWBxhf6N_zv0APXsDk9ZMSMUgtwuFA_QYIOyNMohE8kLbNlcjln_LpQRfPISlWYbsudA
 
 [{
-    "name": "ya",
+    "name": "dfgdfg",
     "brand": "fgfg",
     "key_words":["summer"]
 }]
+
+### 
+// ELASTIC TESTS
+
+GET http://localhost:9200/shoes_mapping/_analyze
+Content-Type: application/json
+
+{ 
+  "analyzer": "shoe_analyzer",
+  "text":"I am the one"
+}
+
+###
+
+PUT http://localhost:9200/shoes_mapping  
+Content-Type: application/json
+
+{
+		"settings":{
+			"number_of_shards":5,
+			"number_of_replicas":0,
+			"analysis":{
+				"filter":{
+				   "stemmer":{
+					  "type":"stemmer",
+					  "language":"english"
+				   },
+				   "stopwords":{
+					  "type":"stop",
+					  "stopwords":[
+						 "_english_"
+					  ]
+				   }
+				},
+				"analyzer":{
+				   "shoe_analyzer":{
+					  "filter":[
+						 "stopwords",
+						 "lowercase",
+						 "stemmer"
+					  ],
+					  "type":"custom",
+					  "tokenizer":"standard"
+				   }
+				}
+			 }
+		},
+		"mappings":{
+			    "dynamic" : false,
+				"properties":{
+					"id": {
+						"type":"text"
+					},
+					"created_at":{
+						"type":"date"
+					},
+					"name":{
+						"type":"text",
+						"fielddata": true,
+						"analyzer":"shoe_analyzer",
+						"search_analyzer":"shoe_analyzer"
+					},
+					"brand":{
+						"type":"text",
+						"fielddata": true,
+						"analyzer":"shoe_analyzer",
+						"search_analyzer":"shoe_analyzer"
+					},
+					"key_words":{
+						"type":"keyword"
+					}
+			}
+		}
+	}
+
+###
+
+POST http://localhost:9200/some1/_doc
+Content-Type: application/json
+
+{
+	"created_at": "2019-12-12",
+	"name": "i another am porivo",
+	"brand": "emporivo",
+	"key_words": ["now", "another"]
+}
+
+###
+
+POST http://localhost:9200/_bulk
+Content-Type: application/x-ndjson
+
+{ "index" : {"_index" : "some1", "_type" : "_doc"}}
+{"created_at": "2019-12-12", "name": "i am porivo", "brand": "emporivo", "key_words": ["one", "another"]}
+{ "index" : { "_index" : "some1", "_type" : "_doc"}}
+{"created_at": "2019-12-12","name": "i another am porivo","brand": "emporivo", "key_words": ["another"]}
+{ "index" : { "_index" : "some1", "_type" : "_doc"}}
+{"created_at": "2019-12-12","name": "gussi shoes","brand": "gussi", "key_words": ["just similar"]}
+
+
+###
+
+GET http://localhost:9200/shoes_mapping/_search
+Content-Type: application/json
+
+{
+  "query": {
+    "simple_query_string" : {
+        "query": "Bubblebox"
+    }
+  }
+}

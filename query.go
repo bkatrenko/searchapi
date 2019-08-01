@@ -2,22 +2,83 @@ package main
 
 import (
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
+
+	wrapper "github.com/pkg/errors"
 )
 
-type queryParams struct {
+const (
+	matchAllTemplate = `"match_all":{}`
+
+	multiMatchTemplate = `
+						"multi_match" : {
+							"query":    "%s", 
+							"fields": ["name", "brand", "key_words"] 
+				  		}`
+
+	filterTemplate = `
+						{
+							"term": {
+								"%s": "%s"
+							}
+						}`
+
+	shoesSearch = `
+						{
+							"query": {
+							"bool": {
+							"must": [
+								{
+									%s
+								}
+							],
+							"filter": [%s] 
+							}
+						},
+							"sort" : { 
+								"%s" : "%s"
+							},
+							"size" : %d,
+							"from": %d
+						}`
+)
+
+type getQueryParams struct {
 	q           string
 	sortBy      string
-	asc         bool
+	order       string
 	filterField string
 	filterValue string
 	limit       int
 	offset      int
 }
 
-func (qp *queryParams) fill(r *http.Request) error {
+type putQueryParams struct {
+	waitingForIndexed bool
+}
+
+func (pqp *putQueryParams) fill(r *http.Request) error {
+	values := r.URL.Query()
+	q, _ := values["waiting"]
+	if len(q) == 0 {
+		pqp.waitingForIndexed = false
+		return nil
+	}
+
+	waitingValue, err := strconv.ParseBool(q[0])
+	if err != nil {
+		return wrapper.Wrap(err, "error while parse 'waiting for' value")
+	}
+
+	pqp.waitingForIndexed = waitingValue
+	return nil
+}
+
+func (qp *getQueryParams) fill(r *http.Request) error {
 	values := r.URL.Query()
 	q, ok := values["q"]
 	if ok {
@@ -33,15 +94,9 @@ func (qp *queryParams) fill(r *http.Request) error {
 		}
 	}
 
-	asc, ok := values["asc"]
+	order, ok := values["order"]
 	if ok {
-		if len(asc) > 0 {
-			ascVal, err := strconv.ParseBool(asc[0])
-			if err != nil {
-				return errors.New("can't parse asc value")
-			}
-			qp.asc = ascVal
-		}
+		qp.order = order[0]
 	}
 
 	filter, ok := values["filter"]
@@ -81,13 +136,37 @@ func (qp *queryParams) fill(r *http.Request) error {
 	return nil
 }
 
-func (qp *queryParams) validate() error {
-	if qp.sortBy == "" {
-		qp.sortBy = "name"
+func (qp *getQueryParams) validateAndFill() error {
+	switch qp.sortBy {
+	case "":
+		qp.sortBy = "created_at"
+	case "name":
+	case "created_at":
+	case "brand":
+	default:
+		return errors.New("bad sort_by param")
+	}
+
+	switch qp.filterField {
+	case "":
+	case "name":
+	case "brand":
+	case "created_at":
+	default:
+		return errors.New("bad filter field value")
+	}
+
+	switch qp.order {
+	case "":
+		qp.order = "desc"
+	case "asc":
+	case "desc":
+	default:
+		return errors.New("bad order value")
 	}
 
 	if qp.limit <= 0 {
-		qp.limit = 10
+		qp.limit = 25
 	}
 
 	if qp.offset < 0 {
@@ -95,4 +174,28 @@ func (qp *queryParams) validate() error {
 	}
 
 	return nil
+}
+
+func (qp *getQueryParams) build() io.Reader {
+	var b strings.Builder
+
+	var searchQuery string
+	var filters string
+
+	switch qp.q {
+	case "":
+		searchQuery = matchAllTemplate
+	default:
+		searchQuery = fmt.Sprintf(multiMatchTemplate, qp.q)
+	}
+
+	switch qp.filterField {
+	case "":
+		filters = ""
+	default:
+		filters = fmt.Sprintf(filterTemplate, qp.filterField, qp.filterValue)
+	}
+
+	b.WriteString(fmt.Sprintf(shoesSearch, searchQuery, filters, qp.sortBy, qp.order, qp.limit, qp.offset))
+	return strings.NewReader(b.String())
 }

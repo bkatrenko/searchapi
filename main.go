@@ -5,14 +5,11 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/joho/godotenv"
 	log "github.com/sirupsen/logrus"
 )
 
 const (
-	envFile = "app.env"
-
-	elasticAddr    = "ELASTIC_ADDR"
+	elasticAddr    = "ELASTICSEARCH_URL"
 	serverAddr     = "SERVER_ADDR"
 	tokenSignKey   = "SIGN_KEY"
 	tokenVerifyKey = "VERIFY_KEY"
@@ -20,8 +17,6 @@ const (
 )
 
 func main() {
-	godotenv.Load(envFile)
-
 	handlers, err := newAPIHandler(
 		os.Getenv(elasticAddr),
 		os.Getenv(tokenSignKey),
@@ -33,17 +28,11 @@ func main() {
 
 	server := newServer(os.Getenv(serverAddr), handlers)
 
-	interruptSignal := make(chan os.Signal)
-	done := make(chan bool)
-	signal.Notify(interruptSignal, os.Interrupt, syscall.SIGTERM)
-
 	go server.start()
 
-	go func() {
-		<-interruptSignal
-		server.shutdown()
-		done <- true
-	}()
+	interruptSignal := make(chan os.Signal)
+	signal.Notify(interruptSignal, os.Interrupt, syscall.SIGTERM)
 
-	<-done
+	<-interruptSignal
+	server.shutdown()
 }

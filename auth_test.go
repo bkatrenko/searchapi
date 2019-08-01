@@ -12,7 +12,10 @@ import (
 )
 
 const (
-	TestSignKeysPath   = "certs/private.rsa"
+	// TestSignKeysPath contains path to the test RSA key (that using for development) and
+	// should be used for sign tokens
+	TestSignKeysPath = "certs/private.rsa"
+	// TestVerifyKeysPath contains test RSA key that should be used for validation tokens
 	TestVerifyKeysPath = "certs/public.rsa"
 )
 
